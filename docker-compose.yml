@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: blc-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: blc_db
+      POSTGRES_USER: blc_user
+      POSTGRES_PASSWORD: blc_pass
+    volumes:
+      - blc_pgdata:/var/lib/postgresql/data
+
+volumes:
+  blc_pgdata:

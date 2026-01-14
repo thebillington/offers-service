@@ -1,0 +1,23 @@
+{
+  "name": "blc-backend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "seed": "ts-node scripts/seed-db.ts",
+    "migrate": "cross-env-shell \"source .env && node-pg-migrate\"" 
+  },
+  "dependencies": {
+    "dotenv": "^16",
+    "node-pg-migrate": "^8.0.4",
+    "pg": "^8",
+    "uuid": "^9"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.8",
+    "@types/pg": "^8.16.0",
+    "@types/uuid": "^10.0.0",
+    "cross-env": "^7.0.3",
+    "ts-node": "^10",
+    "typescript": "^5"
+  }
+}
