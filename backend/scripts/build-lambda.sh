@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="${ROOT}/dist"
+CA_FILENAME="rds-ca-bundle.pem"
+CA_SOURCE="${ROOT}/assets/${CA_FILENAME}"
 
 mkdir -p "${OUT_DIR}"
 
@@ -17,10 +19,17 @@ if [ "${LOCAL_SAM:-0}" = "1" ] && [ -f "${ROOT}/.env" ]; then
   cp "${ROOT}/.env" "${OUT_DIR}/.env"
 fi
 
-if [ "${LOCAL_SAM:-0}" = "1" ] && [ -f "${OUT_DIR}/.env" ]; then
-  (cd "${OUT_DIR}" && zip -q function.zip index.js .env)
-else
-  (cd "${OUT_DIR}" && zip -q function.zip index.js)
+if [ -f "${CA_SOURCE}" ]; then
+  cp "${CA_SOURCE}" "${OUT_DIR}/${CA_FILENAME}"
 fi
+
+zip_items=("index.js")
+if [ -f "${OUT_DIR}/.env" ]; then
+  zip_items+=(".env")
+fi
+if [ -f "${OUT_DIR}/${CA_FILENAME}" ]; then
+  zip_items+=("${CA_FILENAME}")
+fi
+(cd "${OUT_DIR}" && zip -q function.zip "${zip_items[@]}")
 
 echo "Built ${OUT_DIR}/function.zip"

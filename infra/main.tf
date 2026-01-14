@@ -1,0 +1,247 @@
+terraform {
+  required_version = ">= 1.5"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+}
+
+resource "aws_iam_role" "lambda" {
+  name = var.lambda_role_name
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Effect    = "Allow"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_logging" {
+  role       = aws_iam_role.lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_vpc" {
+  role       = aws_iam_role.lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_iam_role_policy" "lambda_vpc_inline" {
+  name = "${var.lambda_role_name}-vpc"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:CreateNetworkInterface",
+          "ec2:DeleteNetworkInterface",
+          "ec2:DescribeNetworkInterfaces",
+          "ec2:DescribeSubnets",
+          "ec2:DescribeSecurityGroups",
+          "ec2:DescribeVpcs"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "lambda_secrets" {
+  name = "${var.lambda_role_name}-secrets"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret"
+        ]
+        Resource = aws_secretsmanager_secret.db.arn
+      }
+    ]
+  })
+}
+
+data "aws_vpc" "default" {
+  default = true
+}
+
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
+}
+
+resource "aws_security_group" "lambda" {
+  name        = "${var.lambda_name}-sg"
+  description = "Lambda security group for RDS access"
+  vpc_id      = data.aws_vpc.default.id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group" "rds" {
+  name        = "${var.db_name}-sg"
+  description = "RDS security group for Lambda access"
+  vpc_id      = data.aws_vpc.default.id
+
+  ingress {
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.lambda.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_db_subnet_group" "default" {
+  name       = "${var.db_name}-subnets"
+  subnet_ids = data.aws_subnets.default.ids
+}
+
+resource "random_password" "db" {
+  length  = 24
+  special = true
+}
+
+resource "aws_db_instance" "postgres" {
+  identifier              = var.db_identifier
+  engine                  = "postgres"
+  instance_class          = var.db_instance_class
+  allocated_storage       = var.db_allocated_storage
+  db_name                 = var.db_name
+  username                = var.db_username
+  password                = random_password.db.result
+  db_subnet_group_name    = aws_db_subnet_group.default.name
+  vpc_security_group_ids  = [aws_security_group.rds.id]
+  publicly_accessible     = var.db_publicly_accessible
+  skip_final_snapshot     = var.db_skip_final_snapshot
+  deletion_protection     = false
+}
+
+resource "aws_secretsmanager_secret" "db" {
+  name = "${var.db_name}-credentials"
+}
+
+resource "aws_secretsmanager_secret_version" "db" {
+  secret_id = aws_secretsmanager_secret.db.id
+  secret_string = jsonencode({
+    username = var.db_username
+    password = random_password.db.result
+    host     = aws_db_instance.postgres.address
+    port     = aws_db_instance.postgres.port
+    database = var.db_name
+    url      = local.database_url
+  })
+}
+
+locals {
+  database_url = "postgresql://${var.db_username}:${random_password.db.result}@${aws_db_instance.postgres.address}:${aws_db_instance.postgres.port}/${var.db_name}?sslmode=require"
+}
+
+resource "aws_cloudwatch_log_group" "api" {
+  name              = "/aws/lambda/${var.lambda_name}"
+  retention_in_days = var.log_retention_days
+}
+
+resource "aws_lambda_function" "api" {
+  filename         = var.lambda_zip_path
+  function_name    = var.lambda_name
+  role             = aws_iam_role.lambda.arn
+  handler          = var.lambda_handler
+  runtime          = var.lambda_runtime
+  architectures    = [var.lambda_architecture]
+  source_code_hash = filebase64sha256(var.lambda_zip_path)
+
+  vpc_config {
+    subnet_ids         = data.aws_subnets.default.ids
+    security_group_ids = [aws_security_group.lambda.id]
+  }
+
+  environment {
+    variables = {
+      DATABASE_URL               = local.database_url
+      PG_MAX_CONNECTIONS         = var.pg_max_connections
+      PG_SSL                     = true
+      PG_SSL_REJECT_UNAUTHORIZED = true
+      NODE_EXTRA_CA_CERTS        = "/var/task/rds-ca-bundle.pem"
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_logging,
+    aws_iam_role_policy_attachment.lambda_vpc,
+    aws_iam_role_policy.lambda_vpc_inline,
+    aws_iam_role_policy.lambda_secrets
+  ]
+}
+
+resource "aws_apigatewayv2_api" "http" {
+  name          = var.api_name
+  protocol_type = "HTTP"
+}
+
+resource "aws_apigatewayv2_integration" "api" {
+  api_id                 = aws_apigatewayv2_api.http.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.api.arn
+  integration_method     = "POST"
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "api_base" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "ANY /api"
+  target    = "integrations/${aws_apigatewayv2_integration.api.id}"
+}
+
+resource "aws_apigatewayv2_route" "api_proxy" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "ANY /api/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.api.id}"
+}
+
+resource "aws_apigatewayv2_stage" "default" {
+  api_id      = aws_apigatewayv2_api.http.id
+  name        = "$default"
+  auto_deploy = true
+}
+
+resource "aws_lambda_permission" "api" {
+  statement_id  = "AllowHttpApiInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.api.arn
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*/api*"
+}

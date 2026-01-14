@@ -48,7 +48,7 @@ yarn seed
 
 # API
 
-The backend is a single Lambda entrypoint (`src/handler.ts`) that delegates routing to `src/router`, which then calls resource handlers in the `router/routes` directory.
+The backend is a single Lambda entry point (`src/handler.ts`) that delegates routing to `src/router`, which then calls resource handlers in the `router/routes` directory.
 
 ## Local Dev
 
