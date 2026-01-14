@@ -30,7 +30,7 @@ You can up the service using docker compose:
 
 `docker compose up -d`
 
-The compose file exposes Postgres on port `5432` and creates a database named `blc_db` with the `blc_user` account and `blc_pass` password. You can override the connection by copying `.env.example` to `.env` and updating `DATABASE_URL`.
+The compose file exposes Postgres on port `5432` and creates a database named `blc_db` with the `blc_user` account and `blc_pass` password. You can override the connection by copying `.env.example` to `.env` and updating `DATABASE_URL` (and `PG_MAX_CONNECTIONS` if you need to adjust the pool size).
 
 ## Creating DB tables
 
@@ -45,3 +45,17 @@ Then you can seed the database with some example data:
 ```bash
 yarn seed
 ```
+
+# API
+
+The backend is a single Lambda entrypoint (`src/handler.ts`) that delegates routing to `src/router`, which then calls resource handlers in the `router/routes` directory.
+
+## Local Dev
+
+Local development requires the SAM CLI, a tool from AWS that provides strong parity with API Gateway. Since we are creating our local database separately, we only need SAM to actually trigger our Lambda handler. Install SAM CLI with:
+
+`brew install aws-sam-cli`
+
+You can then up the service and listen for changes:
+
+`yarn dev`

@@ -1,0 +1,19 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Local SAM template for the Blue Light Card backend Lambda
+
+Resources:
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs20.x
+      Handler: index.handler
+      CodeUri: dist/
+      MemorySize: 512
+      Timeout: 10
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            Path: /api/{proxy+}
+            Method: ANY

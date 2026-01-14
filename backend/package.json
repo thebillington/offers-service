@@ -3,20 +3,25 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "build": "bash scripts/build-lambda.sh",
+    "dev": "bash scripts/dev-watch.sh",
     "seed": "ts-node scripts/seed-db.ts",
-    "migrate": "cross-env-shell \"source .env && node-pg-migrate\"" 
+    "migrate": "cross-env-shell \"source .env && node-pg-migrate\""
   },
   "dependencies": {
     "dotenv": "^16",
     "node-pg-migrate": "^8.0.4",
     "pg": "^8",
-    "uuid": "^9"
+    "uuid": "^9",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/aws-lambda": "^8.10.112",
     "@types/node": "^25.0.8",
     "@types/pg": "^8.16.0",
     "@types/uuid": "^10.0.0",
     "cross-env": "^7.0.3",
+    "esbuild": "^0.19.2",
     "ts-node": "^10",
     "typescript": "^5"
   }
