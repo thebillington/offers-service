@@ -18,6 +18,11 @@ output "migrations_task_definition" {
   description = "ECS task definition family for migrations"
 }
 
+output "seed_task_definition" {
+  value       = aws_ecs_task_definition.seed.family
+  description = "ECS task definition family for seed"
+}
+
 output "migrations_security_group_id" {
   value       = aws_security_group.migrations.id
   description = "Security group for migrations tasks"

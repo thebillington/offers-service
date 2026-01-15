@@ -135,3 +135,15 @@ variable "migrations_image_tag" {
   description = "Image tag for the migrations task"
   default     = "latest"
 }
+
+variable "seed_task_family" {
+  type        = string
+  description = "ECS task definition family for seed"
+  default     = "blc-seed"
+}
+
+variable "seed_image_tag" {
+  type        = string
+  description = "Image tag for the seed task"
+  default     = "seed"
+}

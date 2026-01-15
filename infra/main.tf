@@ -375,6 +375,11 @@ resource "aws_cloudwatch_log_group" "migrations" {
   retention_in_days = var.log_retention_days
 }
 
+resource "aws_cloudwatch_log_group" "seed" {
+  name              = "/ecs/${var.seed_task_family}"
+  retention_in_days = var.log_retention_days
+}
+
 resource "aws_iam_role" "ecs_task_execution" {
   name = "${var.migrations_task_family}-execution-role"
 
@@ -455,6 +460,44 @@ resource "aws_ecs_task_definition" "migrations" {
         logDriver = "awslogs"
         options = {
           awslogs-group         = aws_cloudwatch_log_group.migrations.name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "ecs"
+        }
+      }
+    }
+  ])
+
+  depends_on = [
+    aws_iam_role_policy_attachment.ecs_task_execution,
+    aws_iam_role_policy.ecs_task_execution_secrets,
+  ]
+}
+
+resource "aws_ecs_task_definition" "seed" {
+  family                   = var.seed_task_family
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = var.migrations_task_cpu
+  memory                   = var.migrations_task_memory
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "seed"
+      image     = "${aws_ecr_repository.migrations.repository_url}:${var.seed_image_tag}"
+      essential = true
+      environment = [
+        { name = "PGSSLMODE", value = "require" },
+        { name = "PGSSLROOTCERT", value = "/app/rds-ca-bundle.pem" }
+      ]
+      secrets = [
+        { name = "DATABASE_URL", valueFrom = "${aws_secretsmanager_secret.db.arn}:url::" }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.seed.name
           awslogs-region        = var.aws_region
           awslogs-stream-prefix = "ecs"
         }
