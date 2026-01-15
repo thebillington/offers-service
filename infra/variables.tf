@@ -94,10 +94,16 @@ variable "db_publicly_accessible" {
   default     = false
 }
 
+variable "db_deletion_protection" {
+  type        = bool
+  description = "Enable deletion protection for the DB instance"
+  default     = true
+}
+
 variable "db_skip_final_snapshot" {
   type        = bool
   description = "Skip final snapshot when destroying the DB"
-  default     = true
+  default     = false
 }
 
 variable "migrations_cluster_name" {

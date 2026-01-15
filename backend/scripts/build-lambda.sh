@@ -15,8 +15,15 @@ npx esbuild "${ROOT}/src/handler.ts" \
   --format=cjs \
   --outfile="${OUT_DIR}/index.js"
 
-if [ "${LOCAL_SAM:-0}" = "1" ] && [ -f "${ROOT}/.env" ]; then
-  cp "${ROOT}/.env" "${OUT_DIR}/.env"
+if [ "${LOCAL_SAM:-0}" = "1" ]; then
+  if [ "${CI:-0}" != "0" ]; then
+    echo "Refusing to package .env in CI. Unset LOCAL_SAM or CI to continue." >&2
+    exit 1
+  fi
+
+  if [ -f "${ROOT}/.env" ]; then
+    cp "${ROOT}/.env" "${OUT_DIR}/.env"
+  fi
 fi
 
 if [ -f "${CA_SOURCE}" ]; then

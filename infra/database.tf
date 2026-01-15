@@ -45,7 +45,8 @@ resource "aws_db_instance" "postgres" {
   vpc_security_group_ids  = [aws_security_group.rds.id]
   publicly_accessible     = var.db_publicly_accessible
   skip_final_snapshot     = var.db_skip_final_snapshot
-  deletion_protection     = false
+  final_snapshot_identifier = var.db_skip_final_snapshot ? null : "${var.db_identifier}-final"
+  deletion_protection       = var.db_deletion_protection
 }
 
 resource "aws_secretsmanager_secret" "db" {
