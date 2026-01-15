@@ -39,29 +39,6 @@ resource "aws_iam_role_policy_attachment" "lambda_vpc" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-resource "aws_iam_role_policy" "lambda_vpc_inline" {
-  name = "${var.lambda_role_name}-vpc"
-  role = aws_iam_role.lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "ec2:CreateNetworkInterface",
-          "ec2:DeleteNetworkInterface",
-          "ec2:DescribeNetworkInterfaces",
-          "ec2:DescribeSubnets",
-          "ec2:DescribeSecurityGroups",
-          "ec2:DescribeVpcs"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
-}
-
 data "aws_vpc" "default" {
   default = true
 }
@@ -234,8 +211,7 @@ resource "aws_lambda_function" "api" {
 
   depends_on = [
     aws_iam_role_policy_attachment.lambda_logging,
-    aws_iam_role_policy_attachment.lambda_vpc,
-    aws_iam_role_policy.lambda_vpc_inline
+    aws_iam_role_policy_attachment.lambda_vpc
   ]
 }
 
