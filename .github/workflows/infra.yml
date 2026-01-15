@@ -46,7 +46,12 @@ jobs:
 
       - name: Terraform init
         working-directory: infra
-        run: terraform init -input=false
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=${{ vars.TF_STATE_KEY }}" \
+            -backend-config="region=${{ vars.TF_STATE_REGION }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE }}"
 
       - name: Terraform validate
         working-directory: infra
@@ -54,4 +59,13 @@ jobs:
 
       - name: Terraform apply
         working-directory: infra
-        run: terraform apply -auto-approve -input=false
+        run: |
+          set -o pipefail
+          terraform apply -auto-approve -input=false | tee terraform-apply.log
+
+      - name: Upload Terraform log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-apply-log
+          path: infra/terraform-apply.log
