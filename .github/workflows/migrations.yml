@@ -76,13 +76,28 @@ jobs:
           ECS_SECURITY_GROUP_ID: ${{ steps.tf-outputs.outputs.security_group_id }}
           ECS_SUBNET_IDS: ${{ steps.tf-outputs.outputs.subnet_ids }}
         run: |
-          network_config=$(jq -c \
-            --argjson subnets "${ECS_SUBNET_IDS}" \
-            --arg sg "${ECS_SECURITY_GROUP_ID}" \
-            '{awsvpcConfiguration:{subnets:$subnets,securityGroups:[$sg],assignPublicIp:"ENABLED"}}')
-          overrides=$(jq -c \
-            --arg direction "${MIGRATION_DIRECTION}" \
-            '{containerOverrides:[{name:"migrations",command:[$direction]}]}')
+          set -euo pipefail
+          if [ -z "${ECS_SUBNET_IDS}" ] || [ "${ECS_SUBNET_IDS}" = "null" ]; then
+            echo "Missing ECS subnet IDs from Terraform outputs."
+            exit 1
+          fi
+          if [ -z "${ECS_SECURITY_GROUP_ID}" ] || [ "${ECS_SECURITY_GROUP_ID}" = "null" ]; then
+            echo "Missing ECS security group ID from Terraform outputs."
+            exit 1
+          fi
+          subnet_ids_csv=$(echo "${ECS_SUBNET_IDS}" | jq -r 'join(",")')
+          if [ -z "${subnet_ids_csv}" ] || [ "${subnet_ids_csv}" = "null" ]; then
+            echo "ECS subnet IDs could not be parsed."
+            exit 1
+          fi
+          if [ -z "${MIGRATION_DIRECTION}" ]; then
+            echo "Missing migration direction."
+            exit 1
+          fi
+          network_config="awsvpcConfiguration={subnets=[${subnet_ids_csv}],securityGroups=[${ECS_SECURITY_GROUP_ID}],assignPublicIp=ENABLED}"
+          echo "Using network configuration: ${network_config}"
+          overrides="containerOverrides=[{name=migrations,command=[${MIGRATION_DIRECTION}]}]"
+          echo "Using overrides: ${overrides}"
 
           task_arn=$(aws ecs run-task \
             --cluster "${ECS_CLUSTER}" \
