@@ -62,25 +62,6 @@ resource "aws_iam_role_policy" "lambda_vpc_inline" {
   })
 }
 
-resource "aws_iam_role_policy" "lambda_secrets" {
-  name = "${var.lambda_role_name}-secrets"
-  role = aws_iam_role.lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "secretsmanager:GetSecretValue",
-          "secretsmanager:DescribeSecret"
-        ]
-        Resource = aws_secretsmanager_secret.db.arn
-      }
-    ]
-  })
-}
-
 data "aws_vpc" "default" {
   default = true
 }
@@ -254,8 +235,7 @@ resource "aws_lambda_function" "api" {
   depends_on = [
     aws_iam_role_policy_attachment.lambda_logging,
     aws_iam_role_policy_attachment.lambda_vpc,
-    aws_iam_role_policy.lambda_vpc_inline,
-    aws_iam_role_policy.lambda_secrets
+    aws_iam_role_policy.lambda_vpc_inline
   ]
 }
 
