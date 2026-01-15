@@ -99,3 +99,39 @@ variable "db_skip_final_snapshot" {
   description = "Skip final snapshot when destroying the DB"
   default     = true
 }
+
+variable "migrations_cluster_name" {
+  type        = string
+  description = "ECS cluster name for migrations"
+  default     = "blc-migrations"
+}
+
+variable "migrations_task_family" {
+  type        = string
+  description = "ECS task definition family for migrations"
+  default     = "blc-migrations"
+}
+
+variable "migrations_ecr_repo_name" {
+  type        = string
+  description = "ECR repository name for migrations image"
+  default     = "blc-migrations"
+}
+
+variable "migrations_task_cpu" {
+  type        = string
+  description = "CPU units for the migrations task"
+  default     = "256"
+}
+
+variable "migrations_task_memory" {
+  type        = string
+  description = "Memory for the migrations task (MiB)"
+  default     = "512"
+}
+
+variable "migrations_image_tag" {
+  type        = string
+  description = "Image tag for the migrations task"
+  default     = "latest"
+}

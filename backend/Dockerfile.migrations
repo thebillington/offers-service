@@ -1,0 +1,14 @@
+FROM node:20-slim
+
+WORKDIR /app
+
+COPY package.json yarn.lock ./
+RUN yarn install --frozen-lockfile --production
+
+COPY migrations ./migrations
+COPY assets/rds-ca-bundle.pem ./rds-ca-bundle.pem
+
+ENV NODE_EXTRA_CA_CERTS=/app/rds-ca-bundle.pem
+
+ENTRYPOINT ["./node_modules/.bin/node-pg-migrate"]
+CMD ["up"]

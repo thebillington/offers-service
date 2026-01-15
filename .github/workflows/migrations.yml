@@ -1,0 +1,116 @@
+name: Database Migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      direction:
+        description: "Migration direction"
+        required: true
+        default: "up"
+        type: choice
+        options:
+          - up
+          - down
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/github-terraform
+          aws-region: eu-west-2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.7
+
+      - name: Terraform init
+        working-directory: infra
+        run: terraform init -input=false
+
+      - name: Load Terraform outputs
+        id: tf-outputs
+        working-directory: infra
+        run: |
+          outputs=$(terraform output -json)
+          echo "cluster_name=$(echo "$outputs" | jq -r '.migrations_cluster_name.value')" >> "$GITHUB_OUTPUT"
+          echo "task_definition=$(echo "$outputs" | jq -r '.migrations_task_definition.value')" >> "$GITHUB_OUTPUT"
+          echo "security_group_id=$(echo "$outputs" | jq -r '.migrations_security_group_id.value')" >> "$GITHUB_OUTPUT"
+          echo "subnet_ids=$(echo "$outputs" | jq -c '.migrations_subnet_ids.value')" >> "$GITHUB_OUTPUT"
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push migrations image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: blc-migrations
+          IMAGE_TAG: latest
+        run: |
+          docker build -f backend/Dockerfile.migrations \
+            -t "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}" backend
+          docker push "${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+
+      - name: Run migrations task
+        env:
+          MIGRATION_DIRECTION: ${{ inputs.direction }}
+          ECS_CLUSTER: ${{ steps.tf-outputs.outputs.cluster_name }}
+          ECS_TASK_DEFINITION: ${{ steps.tf-outputs.outputs.task_definition }}
+          ECS_SECURITY_GROUP_ID: ${{ steps.tf-outputs.outputs.security_group_id }}
+          ECS_SUBNET_IDS: ${{ steps.tf-outputs.outputs.subnet_ids }}
+        run: |
+          network_config=$(jq -c \
+            --argjson subnets "${ECS_SUBNET_IDS}" \
+            --arg sg "${ECS_SECURITY_GROUP_ID}" \
+            '{awsvpcConfiguration:{subnets:$subnets,securityGroups:[$sg],assignPublicIp:"ENABLED"}}')
+          overrides=$(jq -c \
+            --arg direction "${MIGRATION_DIRECTION}" \
+            '{containerOverrides:[{name:"migrations",command:[$direction]}]}')
+
+          task_arn=$(aws ecs run-task \
+            --cluster "${ECS_CLUSTER}" \
+            --task-definition "${ECS_TASK_DEFINITION}" \
+            --launch-type FARGATE \
+            --network-configuration "${network_config}" \
+            --overrides "${overrides}" \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          if [ -z "${task_arn}" ] || [ "${task_arn}" = "None" ]; then
+            echo "Failed to start migration task."
+            exit 1
+          fi
+
+          aws ecs wait tasks-stopped \
+            --cluster "${ECS_CLUSTER}" \
+            --tasks "${task_arn}"
+
+          exit_code=$(aws ecs describe-tasks \
+            --cluster "${ECS_CLUSTER}" \
+            --tasks "${task_arn}" \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+          reason=$(aws ecs describe-tasks \
+            --cluster "${ECS_CLUSTER}" \
+            --tasks "${task_arn}" \
+            --query 'tasks[0].stoppedReason' \
+            --output text)
+
+          echo "Migration task exit code: ${exit_code}"
+          echo "Migration task stopped reason: ${reason}"
+
+          if [ "${exit_code}" != "0" ]; then
+            exit 1
+          fi
