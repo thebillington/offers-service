@@ -1,5 +1,7 @@
 # Environment
 
+First `cd` into the `backend` directory then:
+
 1. Take a copy of the `.env.example` script and name it `.env`
 2. Install dependencies `yarn install`
 
@@ -50,6 +52,16 @@ yarn seed
 
 The backend is a single Lambda entry point (`src/handler.ts`) that delegates routing to `src/router`, which then calls resource handlers in the `router/routes` directory.
 
+## Local Dev
+
+Local development requires the SAM CLI, a tool from AWS that provides strong parity with API Gateway. Since we are creating our local database separately, we only need SAM to actually trigger our Lambda handler. Install SAM CLI with:
+
+`brew install aws-sam-cli`
+
+You can then up the service and listen for changes:
+
+`yarn dev`
+
 ## Terraform
 
 Create a local backend config file from the template:
@@ -65,12 +77,4 @@ cd infra
 terraform init -backend-config=backend.hcl
 ```
 
-## Local Dev
-
-Local development requires the SAM CLI, a tool from AWS that provides strong parity with API Gateway. Since we are creating our local database separately, we only need SAM to actually trigger our Lambda handler. Install SAM CLI with:
-
-`brew install aws-sam-cli`
-
-You can then up the service and listen for changes:
-
-`yarn dev`
+Deployment of Terraform changes is done via `Github Actions` so there shouldn't be much need to interact with Terraform directly and beware of destructive changes.
