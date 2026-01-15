@@ -231,7 +231,7 @@ resource "aws_secretsmanager_secret_version" "db" {
 }
 
 locals {
-  database_url = "postgresql://${var.db_username}:${random_password.db.result}@${aws_db_instance.postgres.address}:${aws_db_instance.postgres.port}/${var.db_name}?sslmode=require"
+  database_url = "postgresql://${var.db_username}:${urlencode(random_password.db.result)}@${aws_db_instance.postgres.address}:${aws_db_instance.postgres.port}/${var.db_name}?sslmode=require"
 }
 
 resource "aws_cloudwatch_log_group" "api" {
