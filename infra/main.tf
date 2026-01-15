@@ -104,18 +104,6 @@ data "aws_route_tables" "default" {
   }
 }
 
-data "aws_subnets" "public" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.default.id]
-  }
-
-  filter {
-    name   = "map-public-ip-on-launch"
-    values = ["true"]
-  }
-}
-
 resource "aws_security_group" "lambda" {
   name        = "${var.lambda_name}-sg"
   description = "Lambda security group for RDS access"

@@ -27,8 +27,3 @@ output "migrations_security_group_id" {
   value       = aws_security_group.migrations.id
   description = "Security group for migrations tasks"
 }
-
-output "migrations_subnet_ids" {
-  value       = data.aws_subnets.public.ids
-  description = "Subnets used for migrations tasks"
-}
