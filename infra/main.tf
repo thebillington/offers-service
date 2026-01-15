@@ -92,6 +92,30 @@ data "aws_subnets" "default" {
   }
 }
 
+data "aws_route_tables" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
+
+  filter {
+    name   = "association.main"
+    values = ["true"]
+  }
+}
+
+data "aws_subnets" "public" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
+
+  filter {
+    name   = "map-public-ip-on-launch"
+    values = ["true"]
+  }
+}
+
 resource "aws_security_group" "lambda" {
   name        = "${var.lambda_name}-sg"
   description = "Lambda security group for RDS access"
@@ -109,6 +133,29 @@ resource "aws_security_group" "migrations" {
   name        = "${var.migrations_task_family}-sg"
   description = "ECS migrations security group for RDS access"
   vpc_id      = data.aws_vpc.default.id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group" "vpce" {
+  name        = "${var.migrations_task_family}-vpce-sg"
+  description = "VPC endpoints security group"
+  vpc_id      = data.aws_vpc.default.id
+
+  ingress {
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [
+      aws_security_group.lambda.id,
+      aws_security_group.migrations.id,
+    ]
+  }
 
   egress {
     from_port   = 0
@@ -263,6 +310,58 @@ resource "aws_lambda_permission" "api" {
   source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*/api*"
 }
 
+resource "aws_vpc_endpoint" "secretsmanager" {
+  vpc_id              = data.aws_vpc.default.id
+  service_name        = "com.amazonaws.${var.aws_region}.secretsmanager"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  subnet_ids          = data.aws_subnets.default.ids
+  security_group_ids  = [aws_security_group.vpce.id]
+}
+
+resource "aws_vpc_endpoint" "ecr_api" {
+  vpc_id              = data.aws_vpc.default.id
+  service_name        = "com.amazonaws.${var.aws_region}.ecr.api"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  subnet_ids          = data.aws_subnets.default.ids
+  security_group_ids  = [aws_security_group.vpce.id]
+}
+
+resource "aws_vpc_endpoint" "ecr_dkr" {
+  vpc_id              = data.aws_vpc.default.id
+  service_name        = "com.amazonaws.${var.aws_region}.ecr.dkr"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  subnet_ids          = data.aws_subnets.default.ids
+  security_group_ids  = [aws_security_group.vpce.id]
+}
+
+resource "aws_vpc_endpoint" "logs" {
+  vpc_id              = data.aws_vpc.default.id
+  service_name        = "com.amazonaws.${var.aws_region}.logs"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  subnet_ids          = data.aws_subnets.default.ids
+  security_group_ids  = [aws_security_group.vpce.id]
+}
+
+resource "aws_vpc_endpoint" "sts" {
+  vpc_id              = data.aws_vpc.default.id
+  service_name        = "com.amazonaws.${var.aws_region}.sts"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  subnet_ids          = data.aws_subnets.default.ids
+  security_group_ids  = [aws_security_group.vpce.id]
+}
+
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id            = data.aws_vpc.default.id
+  service_name      = "com.amazonaws.${var.aws_region}.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = data.aws_route_tables.default.ids
+}
+
 resource "aws_ecr_repository" "migrations" {
   name = var.migrations_ecr_repo_name
 }
@@ -342,12 +441,15 @@ resource "aws_ecs_task_definition" "migrations" {
       essential = true
       command   = ["up"]
       environment = [
-        { name = "PG_SSL", value = "true" },
-        { name = "PG_SSL_REJECT_UNAUTHORIZED", value = "true" },
-        { name = "NODE_EXTRA_CA_CERTS", value = "/app/rds-ca-bundle.pem" }
+        { name = "PGSSLMODE", value = "require" },
+        { name = "PGSSLROOTCERT", value = "/app/rds-ca-bundle.pem" }
       ]
       secrets = [
-        { name = "DATABASE_URL", valueFrom = "${aws_secretsmanager_secret.db.arn}:url::" }
+        { name = "PGUSER", valueFrom = "${aws_secretsmanager_secret.db.arn}:username::" },
+        { name = "PGPASSWORD", valueFrom = "${aws_secretsmanager_secret.db.arn}:password::" },
+        { name = "PGHOST", valueFrom = "${aws_secretsmanager_secret.db.arn}:host::" },
+        { name = "PGPORT", valueFrom = "${aws_secretsmanager_secret.db.arn}:port::" },
+        { name = "PGDATABASE", valueFrom = "${aws_secretsmanager_secret.db.arn}:database::" }
       ]
       logConfiguration = {
         logDriver = "awslogs"

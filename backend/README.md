@@ -50,6 +50,21 @@ yarn seed
 
 The backend is a single Lambda entry point (`src/handler.ts`) that delegates routing to `src/router`, which then calls resource handlers in the `router/routes` directory.
 
+## Terraform
+
+Create a local backend config file from the template:
+
+```bash
+cp infra/backend.hcl.example infra/backend.hcl
+```
+
+Then initialize Terraform with it:
+
+```bash
+cd infra
+terraform init -backend-config=backend.hcl
+```
+
 ## Local Dev
 
 Local development requires the SAM CLI, a tool from AWS that provides strong parity with API Gateway. Since we are creating our local database separately, we only need SAM to actually trigger our Lambda handler. Install SAM CLI with:

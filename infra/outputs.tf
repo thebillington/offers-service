@@ -24,6 +24,6 @@ output "migrations_security_group_id" {
 }
 
 output "migrations_subnet_ids" {
-  value       = data.aws_subnets.default.ids
+  value       = data.aws_subnets.public.ids
   description = "Subnets used for migrations tasks"
 }

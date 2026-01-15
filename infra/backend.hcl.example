@@ -1,0 +1,5 @@
+bucket         = "blc-offers-terraform-state-bucket"
+key            = "terraform.tfstate"
+region         = "eu-west-2"
+dynamodb_table = "blc-offers-terraform-locks"
+profile        = "aws-profile"
